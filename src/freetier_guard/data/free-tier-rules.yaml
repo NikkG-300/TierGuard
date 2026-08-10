@@ -1,0 +1,369 @@
+# =============================================================================
+# AWS Free Tier safety rules for freetier-guard
+# -----------------------------------------------------------------------------
+# Rules are DATA, not code. If AWS changes what's free, edit THIS file and
+# re-install / re-run — no Python changes needed.
+#
+# How a rule is read by the tool:
+#
+#   - id             unique identifier (used in --json output and messages)
+#   - title          short human-readable name
+#   - description *  long explanation shown next to a finding
+#   - resource_types resource type prefixes to match, e.g. "aws_nat_gateway"
+#                    (also matches "awscc_*", "moto_*", etc. by suffix match)
+#   - severity       "block" = definitely costs money  -> CLI exits 1
+#                    "warn"  = commonly misused / situational -> CLI exits 0
+#   - when           (optional) conditions that must ALL be true to fire.
+#                    If omitted, the rule fires for every matching resource.
+#                    Three kinds of conditions are supported:
+#
+#       attributes:    map of attribute name -> operator check
+#                      operator: in / not_in / eq / ne / lt / lte / gt / gte
+#                      (not_in = fires when the value is NOT in the list)
+#       config_keys:   list of attributes that must be ABSENT from the
+#                      Terraform config (no reference or value set at all).
+#                      Useful for things like "unattached Elastic IP".
+#       must_be_unreferenced:  true = only fire when NO other resource in the
+#                      plan references this one (e.g. an EIP already wired up
+#                      to a NAT gateway is in use, so it shouldn't count as
+#                      "unattached").
+#
+#   - message   the one-line verdict shown to the user ({...} placeholders
+#              are filled with matching attribute values)
+#   - fix       a beginner-friendly "do this instead"
+#   - docs_url  where you looked this up
+#
+# The Always-Free limits below were checked against
+#   https://aws.amazon.com/free/  (2025+ credit-based program, Always Free
+#   limits still apply) and individual service pricing pages, Aug 2026.
+# =============================================================================
+
+version: 1
+
+metadata:
+  name: AWS Free Tier safety rules
+  description: >
+    Community-maintained rules that catch Terraform resources which will cost
+    money even on the AWS Free Tier. Edit this file to keep in step with AWS
+    terms — updating rules is editing data, never code.
+  updated: "2026-08-10"
+  source: https://aws.amazon.com/free/
+  services_tracked: 17
+
+rules:
+  # -------------------------------------------------------------------------
+  # BLOCK 1 — NAT Gateway: never free (~$32.40/mo + data processing)
+  # -------------------------------------------------------------------------
+  - id: nat-gateway-paid
+    title: NAT Gateway is never free
+    resource_types: [aws_nat_gateway]
+    severity: block
+    description: >
+      A NAT Gateway is billed every hour it exists (roughly $32.40/month)
+      PLUS per-GB for data it processes, even if nothing uses it. This is the
+      #1 beginner surprise bill — it is "attached to a free subnet" and looks
+      harmless.
+    message: NAT Gateway is ALWAYS billed (~$32.40/mo) regardless of traffic.
+    fix: >
+      Remove the NAT Gateway. For learning, keep instances on a PUBLIC subnet and
+      assign them a public IP, or use a cheap t3.micro NAT instance if you truly
+      need private egress. Never leave a NAT Gateway running unattended.
+    docs_url: https://aws.amazon.com/vpc/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 2 — EC2 instance types outside the free tier allowlist
+  # -------------------------------------------------------------------------
+  - id: ec2-instance-type
+    title: EC2 instance type outside the free tier
+    resource_types: [aws_instance, aws_launch_template, aws_launch_configuration]
+    severity: block
+    when:
+      attributes:
+        instance_type:
+          not_in: [t2.micro, t3.micro]
+    description: >
+      Only t2.micro and t3.micro are covered by the EC2 Free Tier (750
+      hours/month). Anything larger is billed per-hour from second one. A
+      t3.large is ~4x the price of a t3.micro.
+    message: "Instance type '{instance_type}' is billed per-hour — only t2.micro / t3.micro are free."
+    fix: Change instance_type to "t3.micro" (or t2.micro) while learning.
+    docs_url: https://aws.amazon.com/ec2/pricing/on-demand/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 3 — RDS database class outside the free tier allowlist
+  # -------------------------------------------------------------------------
+  - id: rds-instance-class
+    title: RDS database class outside the free tier
+    resource_types: [aws_db_instance, aws_rds_cluster_instance]
+    severity: block
+    when:
+      attributes:
+        instance_class:
+          not_in: [db.t2.micro, db.t3.micro]
+    description: >
+      The RDS Free Tier covers db.t2.micro / db.t3.micro only. Moving up a
+      class roughly doubles (or worse) the hourly price, and RDS is billed even
+      when idle.
+    message: "Database class '{instance_class}' is billed per-hour — only db.t2.micro / db.t3.micro are free."
+    fix: Use instance_class = "db.t3.micro" while learning.
+    docs_url: https://aws.amazon.com/rds/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 4 — RDS storage over the 20 GB free allowance
+  # -------------------------------------------------------------------------
+  - id: rds-storage
+    title: RDS storage above the free 20 GB
+    resource_types: [aws_db_instance]
+    severity: block
+    when:
+      attributes:
+        allocated_storage:
+          gt: 20
+    description: >
+      The RDS Free Tier includes 20 GB of storage. Storage is billed by the
+      GB-month and you pay for ALL of it once you exceed the 20 GB allowance.
+    message: "allocated_storage is {allocated_storage} GB — only the first 20 GB is free."
+    fix: Set allocated_storage to 20 (or 5) while learning.
+    docs_url: https://aws.amazon.com/rds/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 5 — RDS Multi-AZ is never free
+  # -------------------------------------------------------------------------
+  - id: rds-multi-az
+    title: RDS Multi-AZ is never free
+    resource_types: [aws_db_instance]
+    severity: block
+    when:
+      attributes:
+        multi_az:
+          eq: true
+    description: >
+      Multi-AZ provisions a fully duplicated standby database. It is billed on
+      top of the instance and is NOT covered by any free tier.
+    message: "multi_az = true doubles the database bill and is never free."
+    fix: Remove multi_az (or set it to false) while learning.
+    docs_url: https://aws.amazon.com/rds/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 6 — Unattached Elastic IP (billed hourly)
+  # -------------------------------------------------------------------------
+  - id: eip-unattached
+    title: Unattached Elastic IP is billed hourly
+    resource_types: [aws_eip]
+    severity: block
+    when:
+      config_keys:
+        all_absent: [instance, network_interface, associate_with_private_ip]
+      must_be_unreferenced: true
+    description: >
+      Elastic IPs are only free while attached to a RUNNING EC2 instance.
+      Allocated-but-unattached IPs are billed (~$3.60/month) even with nothing
+      using them — and the EIP sticks around forever if you forget to delete it.
+    message: Elastic IP is allocated but NOT attached to anything — billed hourly until you release it.
+    fix: >
+      Attach it to a running t3.micro instance with instance = aws_instance...,
+      or run: terraform destroy, or release the address in the console.
+    docs_url: https://aws.amazon.com/ec2/pricing/on-demand/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 7 — Load balancers are never free
+  # -------------------------------------------------------------------------
+  - id: load-balancer-paid
+    title: Load balancers are never free
+    resource_types: [aws_lb, aws_alb, aws_nlb, aws_elb, aws_lb_target_group]
+    severity: block
+    description: >
+      Application / Network / Classic load balancers are billed per-hour plus
+      per LCU (and target groups count once data flows through them). No load
+      balancer type is covered by the Free Tier.
+    message: Load balancers are ALWAYS billed (~$16+/mo) — no free tier coverage.
+    fix: >
+      Skip the load balancer while learning — hit the instance's public IP
+      directly. If you really need one, remember it will cost money from
+      minute one.
+    docs_url: https://aws.amazon.com/elasticloadbalancing/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 8 — EBS volume larger than 30 GB
+  # -------------------------------------------------------------------------
+  - id: ebs-size
+    title: EBS volume larger than 30 GB
+    resource_types: [aws_ebs_volume]
+    severity: block
+    when:
+      attributes:
+        size:
+          gt: 30
+    description: >
+      The Free Tier includes 30 GB of standard EBS storage (gp2/gp3). Every
+      GB above that is billed, whether or not you use it.
+    message: "Volume is {size} GB — only the first 30 GB of EBS is free."
+    fix: Reduce size to 30 or less (an OS typically needs 8–20 GB).
+    docs_url: https://aws.amazon.com/ebs/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 9 — Provisioned IOPS (io1 / io2) volumes are always paid
+  # -------------------------------------------------------------------------
+  - id: ebs-provisioned-iops
+    title: Provisioned IOPS volume (never covered)
+    resource_types: [aws_ebs_volume]
+    severity: block
+    when:
+      attributes:
+        type:
+          in: [io1, io2, io2_block_express]
+    description: >
+      io1 / io2 volumes charge for every IOPS you provision on top of the
+      volume price. They are NOT part of the free 30 GB EBS allowance.
+    message: "Volume type '{type}' bills per provisioned IOPS — always costs money."
+    fix: Use type = "gp3" (free tier covers gp2/gp3 storage).
+    docs_url: https://aws.amazon.com/ebs/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 10 — AWS Secrets Manager secrets are always paid
+  # -------------------------------------------------------------------------
+  - id: secrets-manager-paid
+    title: Secrets Manager is always billed
+    resource_types:
+      [aws_secretsmanager_secret, aws_secretsmanager_secret_version]
+    severity: block
+    description: >
+      Secrets Manager charges per secret (~$0.40/secret/month) plus per 10,000
+      API calls — there is no free tier for it. A super common beginner trap
+      when storing a "free" config value.
+    message: Secrets Manager bills every secret (~$0.40/secret/mo) — no free tier.
+    fix: >
+      Use SSM Parameter Store (free tier: 10,000 params) or just a .env file
+      locally while learning.
+    docs_url: https://aws.amazon.com/secrets-manager/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 11 — ElastiCache is never free
+  # -------------------------------------------------------------------------
+  - id: elasticache-paid
+    title: ElastiCache is never free
+    resource_types: [aws_elasticache_cluster, aws_elasticache_replication_group]
+    severity: block
+    description: >
+      ElastiCache (memcached / redis) bills for the underlying cache node every
+      hour. There is no free tier for it — a common "redis for my README app"
+      ticket to a bill.
+    message: ElastiCache bills its cache nodes hourly — no free tier.
+    fix: >
+      Run Redis locally with Docker, or skip caching entirely while learning.
+    docs_url: https://aws.amazon.com/elasticache/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 12 — ECS/Fargate services always consume billed compute
+  # -------------------------------------------------------------------------
+  - id: ecs-service-paid
+    title: ECS / Fargate is billed compute
+    resource_types: [aws_ecs_cluster, aws_ecs_service, aws_ecs_task_definition]
+    severity: block
+    description: >
+      Fargate bills per GB-second and per vCPU-second. ECS on EC2 bills for the
+      EC2 instances. Neither is free — beginners deploy a "free" Docker app and
+      get billed for the compute underneath.
+    message: ECS/Fargate bills the compute underneath — never free.
+    fix: >
+      Use EC2 (t3.micro) directly with Docker installed, or run a serverless
+      stack (Lambda + API Gateway / DynamoDB) that fits the free tier.
+    docs_url: https://aws.amazon.com/fargate/pricing/
+
+  # -------------------------------------------------------------------------
+  # BLOCK 13 — AWS Backup plans are always paid
+  # -------------------------------------------------------------------------
+  - id: backup-paid
+    title: AWS Backup is always billed
+    resource_types: [aws_backup_plan, aws_backup_vault, aws_backup_selection]
+    severity: block
+    description: >
+      AWS Backup has no free tier — it bills per GB backed up plus per restore.
+      Turning it on "just in case" quietly adds monthly cost.
+    message: AWS Backup bills per GB stored + restores — no free tier.
+    fix: Run without Backup while learning; you can always re-create resources.
+    docs_url: https://aws.amazon.com/backup/pricing/
+
+  # -------------------------------------------------------------------------
+  # WARN 1 — Lambda memory large enough to burn the free GB-seconds fast
+  # -------------------------------------------------------------------------
+  - id: lambda-memory
+    title: Lambda memory above the free-tier sweet spot
+    resource_types: [aws_lambda_function]
+    severity: warn
+    when:
+      attributes:
+        memory_size:
+          gte: 1024
+    description: >
+      Lambda's Always Free allowance is 1M requests and 400,000 GB-seconds /
+      month. Doubling memory halves the seconds you get — a 1024 MB function
+      can eat the whole allowance in ~10 days of a busy API.
+    message: "Lambda memory_size = {memory_size} MB burns the 400,000 GB-seconds free allowance 4x faster."
+    fix: Start with memory_size = 128 (the default) while learning.
+    docs_url: https://aws.amazon.com/lambda/pricing/
+
+  # -------------------------------------------------------------------------
+  # WARN 2 — DynamoDB without free-tier-safe capacity
+  # -------------------------------------------------------------------------
+  - id: dynamodb-capacity
+    title: DynamoDB capacity beyond the free tier
+    resource_types: [aws_dynamodb_table]
+    severity: warn
+    when:
+      attributes:
+        billing_mode:
+          eq: PROVISIONED
+    description: >
+      DynamoDB's Always Free tier covers 25 WCUs + 25 RCUs and 25 GB of storage.
+      A provisioned table above ~25/25 will be billed per capacity unit.
+    message: "DynamoDB free tier covers 25 WCU / 25 RCU / 25 GB. Verify read_capacity = {read_capacity} and write_capacity = {write_capacity} stay below those limits (or use PAY_PER_REQUEST and watch usage)."
+    fix: >
+      Use PAY_PER_REQUEST while learning (costs only what you consume) or cap
+      provisioned capacity at 25 WCU / 25 RCU.
+    docs_url: https://aws.amazon.com/dynamodb/pricing/
+
+  - id: dynamodb-pay-per-request
+    title: DynamoDB on-demand (watch your usage)
+    resource_types: [aws_dynamodb_table]
+    severity: warn
+    when:
+      attributes:
+        billing_mode:
+          eq: PAY_PER_REQUEST
+    description: >
+      PAY_PER_REQUEST tables feel free but bill for every request over the
+      Always Free allowance (25 WCU / 25 RCU equivalent, 25 GB storage).
+      Queries with scans can quietly exceed that.
+    message: PAY_PER_REQUEST DynamoDB bills over the free allowance — keep tables small.
+    fix: Keep tables below 25 GB and avoid full-table scans while learning.
+    docs_url: https://aws.amazon.com/dynamodb/pricing/
+
+  # -------------------------------------------------------------------------
+  # WARN 3 — CloudWatch alarms count toward a free limit of 10
+  # -------------------------------------------------------------------------
+  - id: cloudwatch-alarms
+    title: CloudWatch alarm (10 free per month)
+    resource_types: [aws_cloudwatch_metric_alarm]
+    severity: warn
+    description: >
+      CloudWatch always-free includes 10 alarms, 10 custom metrics and 5 GB of
+      logs per month. Each alarm in your plan counts toward that 10.
+    message: Each alarm counts toward the free allowance of 10 CloudWatch alarms.
+    fix: Keep 2–3 alarms max while learning unless you really need them.
+    docs_url: https://aws.amazon.com/cloudwatch/pricing/
+
+  # -------------------------------------------------------------------------
+  # WARN 4 — S3 buckets themselves are free, but storage is not
+  # -------------------------------------------------------------------------
+  - id: s3-storage
+    title: S3 bucket (storage limit reminder)
+    resource_types: [aws_s3_bucket]
+    severity: warn
+    description: >
+      Creating a bucket is free, but what you PUT in it is billed. The Always
+      Free allowance is 5 GB of Standard storage (100 GB data transfer out).
+      Versioning doubles every object's storage.
+    message: "Bucket creation is free, but stored objects count toward the 5 GB S3 free allowance."
+    fix: Enable lifecycle rules to expire old objects, and keep buckets small.
+    docs_url: https://aws.amazon.com/s3/pricing/
