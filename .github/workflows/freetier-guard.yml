@@ -1,0 +1,38 @@
+name: freetier-guard
+
+# Every pull request is checked against the AWS Free Tier safety rules.
+# This workflow runs the tool against the repo's own terraform fixture, so a
+# PR that (say) accidentally relaxes rules.yaml will fail before merge.
+# Point the same pattern at your own infra directory to guard real plans.
+
+on:
+  pull_request:
+
+jobs:
+  check-free-tier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.0
+          terraform_wrapper: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install freetier-guard
+        run: pip install -e .
+
+      - name: Generate real plan JSON (no AWS credentials needed)
+        working-directory: tests/fixtures/terraform_project
+        run: |
+          terraform init -input=false
+          terraform plan -out plan.tfplan -input=false
+          terraform show -json plan.tfplan > plan.json
+
+      - name: Check the plan against the Free Tier rules
+        working-directory: tests/fixtures/terraform_project
+        run: freetier-guard check plan.json
