@@ -1,4 +1,4 @@
-"""freetier-guard command line interface."""
+"""TierGuard command line interface."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from typing import Optional
 
 import typer
 
-from freetier_guard import __version__
-from freetier_guard.checker import block_count, check_plan
-from freetier_guard.plan import load_plan
-from freetier_guard.report import findings_json, render_pretty
-from freetier_guard.rules import load_rules
+from tierguard import __version__
+from tierguard.checker import block_count, check_plan
+from tierguard.plan import load_plan
+from tierguard.report import findings_json, render_pretty
+from tierguard.rules import load_rules
 
 app = typer.Typer(
-    name="freetier-guard",
+    name="tierguard",
     help="Check a Terraform plan for AWS Free Tier safety BEFORE you apply.",
     add_completion=False,
     no_args_is_help=True,
@@ -23,7 +23,7 @@ app = typer.Typer(
 
 def _version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"freetier-guard {__version__}")
+        typer.echo(f"tierguard {__version__}")
         raise typer.Exit()
 
 
@@ -33,7 +33,7 @@ def _main(
         False, "--version", "-v", help="Show version and exit.", callback=_version_callback
     ),
 ) -> None:
-    """freetier-guard: catch surprise AWS bills before they happen."""
+    """TierGuard: catch surprise AWS bills before they happen."""
 
 
 @app.command(
@@ -72,7 +72,7 @@ def check(
         ruleset = load_rules(rules)
         findings = check_plan(plan, ruleset)
     except (FileNotFoundError, ValueError, OSError) as exc:
-        typer.echo(f"freetier-guard: error: {exc}", err=True)
+        typer.echo(f"tierguard: error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
     if json_output:

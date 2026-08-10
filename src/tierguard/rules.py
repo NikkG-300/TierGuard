@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 import yaml
 
-DEFAULT_RULES_PATH = files("freetier_guard.data").joinpath("free-tier-rules.yaml")
+DEFAULT_RULES_PATH = files("tierguard.data").joinpath("free-tier-rules.yaml")
 
 VALID_SEVERITIES = ("block", "warn")
 

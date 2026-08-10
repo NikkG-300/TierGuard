@@ -1,5 +1,5 @@
 # =============================================================================
-# AWS Free Tier safety rules for freetier-guard
+# AWS Free Tier safety rules for TierGuard
 # -----------------------------------------------------------------------------
 # Rules are DATA, not code. If AWS changes what's free, edit THIS file and
 # re-install / re-run — no Python changes needed.
@@ -36,6 +36,14 @@
 # The Always-Free limits below were checked against
 #   https://aws.amazon.com/free/  (2025+ credit-based program, Always Free
 #   limits still apply) and individual service pricing pages, Aug 2026.
+#
+# Free Tier restructure: the classic 12-month allowances (e.g. specific EC2 /
+# RDS instance classes and storage) apply to accounts created BEFORE
+# July 15, 2025. Newer accounts get a 6-month, $200 credit balance instead, so
+# those instance-type/storage "free" claims are time-limited. Rules that
+# depend on a classic allowance say so in their message; resources that are
+# NEVER free (NAT Gateway, load balancers, provisioned IOPS, ...) warn no
+# matter which account plan you're on.
 # =============================================================================
 
 version: 1
@@ -83,9 +91,10 @@ rules:
           not_in: [t2.micro, t3.micro]
     description: >
       Only t2.micro and t3.micro are covered by the EC2 Free Tier (750
-      hours/month). Anything larger is billed per-hour from second one. A
+      hours/month, classic 12-months-free model for pre-July 2025 accounts).
+      Anything larger is billed per-hour from second one. A
       t3.large is ~4x the price of a t3.micro.
-    message: "Instance type '{instance_type}' is billed per-hour — only t2.micro / t3.micro are free."
+    message: "Instance type '{instance_type}' is billed per-hour — only t2.micro / t3.micro are free (classic 12-months-free plan, pre-July 2025 accounts)."
     fix: Change instance_type to "t3.micro" (or t2.micro) while learning.
     docs_url: https://aws.amazon.com/ec2/pricing/on-demand/
 
@@ -101,10 +110,11 @@ rules:
         instance_class:
           not_in: [db.t2.micro, db.t3.micro]
     description: >
-      The RDS Free Tier covers db.t2.micro / db.t3.micro only. Moving up a
+      The RDS Free Tier covers db.t2.micro / db.t3.micro only (classic
+      12-months-free model for pre-July 2025 accounts). Moving up a
       class roughly doubles (or worse) the hourly price, and RDS is billed even
       when idle.
-    message: "Database class '{instance_class}' is billed per-hour — only db.t2.micro / db.t3.micro are free."
+    message: "Database class '{instance_class}' is billed per-hour — only db.t2.micro / db.t3.micro are free (classic 12-months-free plan, pre-July 2025 accounts)."
     fix: Use instance_class = "db.t3.micro" while learning.
     docs_url: https://aws.amazon.com/rds/pricing/
 
@@ -120,9 +130,10 @@ rules:
         allocated_storage:
           gt: 20
     description: >
-      The RDS Free Tier includes 20 GB of storage. Storage is billed by the
+      The RDS Free Tier includes 20 GB of storage (classic 12-months-free
+      model for pre-July 2025 accounts). Storage is billed by the
       GB-month and you pay for ALL of it once you exceed the 20 GB allowance.
-    message: "allocated_storage is {allocated_storage} GB — only the first 20 GB is free."
+    message: "allocated_storage is {allocated_storage} GB — only the first 20 GB is free (classic 12-months-free plan, pre-July 2025 accounts)."
     fix: Set allocated_storage to 20 (or 5) while learning.
     docs_url: https://aws.amazon.com/rds/pricing/
 
@@ -195,9 +206,10 @@ rules:
         size:
           gt: 30
     description: >
-      The Free Tier includes 30 GB of standard EBS storage (gp2/gp3). Every
+      The Free Tier includes 30 GB of standard EBS storage (gp2/gp3, classic
+      12-months-free model for pre-July 2025 accounts). Every
       GB above that is billed, whether or not you use it.
-    message: "Volume is {size} GB — only the first 30 GB of EBS is free."
+    message: "Volume is {size} GB — only the first 30 GB of EBS is free (classic 12-months-free plan, pre-July 2025 accounts)."
     fix: Reduce size to 30 or less (an OS typically needs 8–20 GB).
     docs_url: https://aws.amazon.com/ebs/pricing/
 

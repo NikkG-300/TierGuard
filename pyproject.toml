@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "freetier-guard"
+name = "tierguard"
 version = "0.1.0"
 description = "Check a Terraform plan for AWS Free Tier safety BEFORE you run terraform apply."
 readme = "README.md"
@@ -32,10 +32,10 @@ dev = [
 ]
 
 [project.scripts]
-freetier-guard = "freetier_guard.cli:main"
+tierguard = "tierguard.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/freetier_guard"]
+packages = ["src/tierguard"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

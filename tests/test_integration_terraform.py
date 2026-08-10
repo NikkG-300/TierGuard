@@ -20,9 +20,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from freetier_guard.checker import check_plan
-from freetier_guard.plan import parse_plan
-from freetier_guard.rules import load_rules
+from tierguard.checker import check_plan
+from tierguard.plan import parse_plan
+from tierguard.rules import load_rules
 
 from conftest import TERRAFORM_PROJECT
 

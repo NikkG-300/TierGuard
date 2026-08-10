@@ -1,15 +1,15 @@
-# freetier-guard
+# TierGuard
 
 **Check a Terraform plan for AWS Free Tier safety — before you run `terraform apply`.**
 
-`freetier-guard` reads the JSON output of `terraform show -json` and tells you,
+`tierguard` reads the JSON output of `terraform show -json` and tells you,
 resource by resource, whether your plan will stay in the AWS Free Tier or
 quietly start charging you money.
 
 ```console
 $ terraform plan -out plan.tfplan
 $ terraform show -json plan.tfplan > plan.json
-$ freetier-guard check plan.json        # exits 1 if any blocking finding
+$ tierguard check plan.json        # exits 1 if any blocking finding
 ```
 
 It is free, requires **zero AWS setup** (no billing account, no API keys —
@@ -35,7 +35,7 @@ Beginners get surprise bills from common mistakes like:
 | Any load balancer | **~$16+/month**, never covered |
 | EBS volume over 30 GB | billed per GB-month |
 
-Existing tools like Infracost estimate *total costs* for teams. `freetier-guard`
+Existing tools like Infracost estimate *total costs* for teams. `TierGuard`
 is the opposite: a single-purpose, zero-setup "yes / no, is this Free Tier
 safe" answer aimed at students and bootcampers.
 
@@ -50,14 +50,14 @@ already been spent.
 Requires **Python 3.9+**.
 
 ```console
-$ pip install freetier-guard
+$ pip install tierguard
 ```
 
 Or run from a checkout (recommended while developing):
 
 ```console
-$ git clone https://github.com/<you>/freetier-guard
-$ cd freetier-guard
+$ git clone https://github.com/NikkG-300/tierguard
+$ cd tierguard
 $ python -m venv .venv
 $ .venv\Scripts\activate        # on Windows;  `source .venv/bin/activate` on macOS/Linux
 $ pip install -e .
@@ -68,7 +68,7 @@ $ pip install -e .
 ## Usage
 
 ```console
-$ freetier-guard check <plan.json> [--rules rules.yaml] [--json]
+$ tierguard check <plan.json> [--rules rules.yaml] [--json]
 ```
 
 ### Step-by-step
@@ -84,7 +84,7 @@ $ freetier-guard check <plan.json> [--rules rules.yaml] [--json]
    fixture avoids them.)
 3. Run the guard:
    ```console
-   $ freetier-guard check plan.json
+   $ tierguard check plan.json
    ```
 
 ### What the output means
@@ -93,8 +93,8 @@ $ freetier-guard check <plan.json> [--rules rules.yaml] [--json]
 - **WARN** — situational / commonly misused. The CLI exits with code **0**.
 
 ```console
-$ freetier-guard check plan.json
-┌ freetier-guard ────────────────────────────────┐
+$ tierguard check plan.json
+┌ tierguard ────────────────────────────────┐
 │ 3 block(s) and 2 warning(s) in this plan        │
 └─────────────────────────────────────────────────┘
 
@@ -113,7 +113,7 @@ Exiting with code 1 - fix the 3 blocking finding(s) before terraform apply.
 Use `--json` for machine-readable output ready to feed into CI:
 
 ```console
-$ freetier-guard check plan.json --json
+$ tierguard check plan.json --json
 [
   {
     "severity": "block",
@@ -144,7 +144,7 @@ resource "aws_nat_gateway" "nat" {
 
 ```console
 $ terraform plan -out plan.tfplan && terraform show -json plan.tfplan > plan.json
-$ freetier-guard check plan.json
+$ tierguard check plan.json
 BLOCK   aws_nat_gateway.nat    NAT Gateway is never free
    A NAT Gateway is ALWAYS billed (~$32.40/month) even with zero traffic.
 Exiting with code 1 - fix the 1 blocking finding(s) before terraform apply.
@@ -154,7 +154,7 @@ Exiting with code 1 - fix the 1 blocking finding(s) before terraform apply.
 and the guard goes green:
 
 ```console
-$ freetier-guard check plan.json
+$ tierguard check plan.json
 All clear - every resource fits the AWS Free Tier.
 ```
 
@@ -171,7 +171,7 @@ All clear - every resource fits the AWS Free Tier.
 ## How the rules work
 
 All rules live in
-[`freetier_guard/data/free-tier-rules.yaml`](src/freetier_guard/data/free-tier-rules.yaml).
+[`tierguard/data/free-tier-rules.yaml`](src/tierguard/data/free-tier-rules.yaml).
 They are **data, not code** — when AWS changes what's covered, you edit the
 YAML file, not the Python. Every rule has a `severity` (`block` / `warn`), a
 list of `resource_types` to match, optional `when` conditions on attribute
@@ -180,16 +180,27 @@ values, a beginner-friendly `message`, and a `fix`.
 Rules can be overridden with your own file:
 
 ```console
-$ freetier-guard check plan.json --rules my-company-rules.yaml
+$ tierguard check plan.json --rules my-company-rules.yaml
 ```
 
 Current rules cover: NAT Gateway, EC2 instance types, RDS class + storage +
 Multi-AZ, unattached Elastic IPs, load balancers, EBS size + provisioned IOPS,
 Secrets Manager, ElastiCache, ECS/Fargate, AWS Backup, Lambda memory, DynamoDB
 capacity, CloudWatch alarms, and S3 storage. Covered limits were checked
-against the [AWS Free Tier page](https://aws.amazon.com/free/) (Aug 2026) —
-note AWS restructured Free Tier in 2025 around credits, but the Always-Free
-limits still apply and the "never free" resource types haven't changed.
+against the [AWS Free Tier page](https://aws.amazon.com/free/) (Aug 2026).
+
+Note: AWS restructured its Free Tier on July 15, 2025. Accounts created
+**BEFORE** that date still get the classic 12-months-free allowances these
+rules are modeled on (e.g. EC2/RDS free for 12 months). Accounts created
+**AFTER** that date instead get a $200 credit balance that expires after 6
+months — free tier rules like instance-type limits don't map cleanly onto
+that model. Either way, these rules still correctly flag genuinely expensive
+resources (NAT Gateway, load balancers, provisioned IOPS, etc.) that will
+drain a credit balance fast or bill immediately regardless of plan type. If
+you're not sure which plan your AWS account is on, check the Billing Console —
+this affects how you should interpret a "BLOCK" finding on a resource that's
+only free for a *limited time* (like EC2 instance hours) versus one that's
+*never* free (like a NAT Gateway).
 
 ---
 
@@ -199,8 +210,8 @@ Add a workflow so every pull request fails before anyone runs `terraform apply`.
 A minimal example that runs on the `terraform_project` fixture:
 
 ```yaml
-# .github/workflows/freetier-guard.yml
-name: freetier-guard
+# .github/workflows/tierguard.yml
+name: tierguard
 
 on:
   pull_request:
@@ -219,8 +230,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install freetier-guard
-        run: pip install freetier-guard
+      - name: Install TierGuard
+        run: pip install tierguard
 
       - name: Generate plan JSON
         working-directory: infra
@@ -231,7 +242,7 @@ jobs:
 
       - name: Check Free Tier safety
         working-directory: infra
-        run: freetier-guard check plan.json
+        run: tierguard check plan.json
 ```
 
 The job's exit code follows the plan's blocking findings automatically, so the
@@ -259,7 +270,7 @@ If Terraform isn't installed, those tests are skipped.
 ## Project layout
 
 ```
-freetier_guard/
+tierguard/
   cli.py                 # Typer CLI (exit codes, --json)
   plan.py                # parse + flatten terraform show -json (root + child modules)
   rules.py               # load / validate / match rules (the YAML engine)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from freetier_guard.rules import load_rules, parse_rules
+from tierguard.rules import load_rules, parse_rules
 
 EXPECTED_RULE_IDS = {
     "nat-gateway-paid",

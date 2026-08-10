@@ -8,7 +8,7 @@ values, and cross-resource reference detection.
 
 from __future__ import annotations
 
-from freetier_guard.plan import load_plan
+from tierguard.plan import load_plan
 
 from conftest import PLAN_JSON, resource_of
 

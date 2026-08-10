@@ -6,7 +6,7 @@ import json
 
 from typer.testing import CliRunner
 
-from freetier_guard.cli import app
+from tierguard.cli import app
 
 from conftest import PLAN_JSON
 

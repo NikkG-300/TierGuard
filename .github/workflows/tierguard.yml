@@ -1,4 +1,4 @@
-name: freetier-guard
+name: tierguard
 
 # Every pull request is checked against the AWS Free Tier safety rules.
 # This workflow runs the tool against the repo's own terraform fixture, so a
@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install freetier-guard
+      - name: Install TierGuard
         run: pip install -e .
 
       - name: Generate real plan JSON (no AWS credentials needed)
@@ -35,4 +35,4 @@ jobs:
 
       - name: Check the plan against the Free Tier rules
         working-directory: tests/fixtures/terraform_project
-        run: freetier-guard check plan.json
+        run: tierguard check plan.json

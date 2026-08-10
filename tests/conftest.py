@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from freetier_guard.plan import Plan, Resource
+from tierguard.plan import Plan, Resource
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PLAN_JSON = FIXTURES / "plans" / "plan.json"

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from freetier_guard.plan import Plan, Resource
-from freetier_guard.rules import Rule, Rules
+from tierguard.plan import Plan, Resource
+from tierguard.rules import Rule, Rules
 
 
 @dataclass

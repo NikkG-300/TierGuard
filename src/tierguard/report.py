@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from freetier_guard.checker import Finding, block_count, warn_count
+from tierguard.checker import Finding, block_count, warn_count
 
 SEVERITY_STYLE = {"block": "bold red", "warn": "bold yellow"}
 SEVERITY_ICON = {"block": "BLOCK", "warn": "WARN"}
@@ -48,7 +48,7 @@ def render_pretty(findings: list[Finding]) -> str:
                     "All clear - every resource fits the AWS Free Tier.",
                     style="bold green",
                 ),
-                title="freetier-guard",
+                title="TierGuard",
                 border_style="green",
             )
         )
@@ -59,7 +59,7 @@ def render_pretty(findings: list[Finding]) -> str:
                     f"{blocks} block(s) and {warns} warning(s) in this plan",
                     style="bold" if blocks else "bold yellow",
                 ),
-                title="freetier-guard",
+                title="TierGuard",
                 border_style="red" if blocks else "yellow",
             )
         )

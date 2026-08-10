@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from freetier_guard.checker import block_count, check_plan, warn_count
-from freetier_guard.plan import load_plan
-from freetier_guard.rules import load_rules
+from tierguard.checker import block_count, check_plan, warn_count
+from tierguard.plan import load_plan
+from tierguard.rules import load_rules
 
 from conftest import PLAN_JSON
 
