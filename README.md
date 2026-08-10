@@ -56,8 +56,8 @@ $ pip install tierguard
 Or run from a checkout (recommended while developing):
 
 ```console
-$ git clone https://github.com/NikkG-300/tierguard
-$ cd tierguard
+$ git clone https://github.com/NikkG-300/TierGuard
+$ cd TierGuard
 $ python -m venv .venv
 $ .venv\Scripts\activate        # on Windows;  `source .venv/bin/activate` on macOS/Linux
 $ pip install -e .
