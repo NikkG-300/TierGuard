@@ -45,7 +45,7 @@ def render_pretty(findings: list[Finding]) -> str:
         console.print(
             Panel(
                 Text(
-                    "All clear - every resource fits the AWS Free Tier.",
+                    "All clear - no blocked resources in this plan.",
                     style="bold green",
                 ),
                 title="TierGuard",
